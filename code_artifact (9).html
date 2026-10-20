@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام فواتير شركة كيفان للقهوة العربية</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Arabic Fonts: Cairo & Tajawal -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <!-- html2pdf.js for generating crisp PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
+    <style>
+        /* CSS resets for Arabic typography rendering in Canvas & PDF */
+        * {
+            font-family: 'Cairo', 'Tajawal', sans-serif !important;
+            box-sizing: border-box;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        body {
+            background-color: #f3efe6;
+            color: #2b1f17;
+            direction: rtl;
+            text-align: right;
+        }
+
+        /* Fix Arabic text splitting / disjointed characters issue in html2canvas / html2pdf */
+        .arabic-fix {
+            direction: rtl !important;
+            unicode-bidi: isolate !important;
+            font-feature-settings: "kern" 1, "liga" 1, "calt" 1 !important;
+            text-rendering: optimizeLegibility !important;
+            letter-spacing: normal !important;
+            word-spacing: normal !important;
+            white-space: normal;
+        }
+
+        /* Invoice Container strictly sized for standard A4 aspect without spilling */
+        #printable-invoice {
+            width: 794px; /* Exact A4 width px at 96DPI */
+            min-height: 1123px;
+            margin: 0 auto;
+            background: #ffffff;
+            box-sizing: border-box;
+        }
+
+        /* Print media query overrides */
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            body {
+                background: white !important;
+                padding: 0 !important;
+            }
+            #printable-invoice {
+                box-shadow: none !important;
+                margin: 0 !important;
+                width: 100% !important;
+            }
+        }
+
+        .brand-bg { background-color: #3d2314; }
+        .brand-text { color: #3d2314; }
+        .brand-gold { color: #c59b27; }
+        .brand-gold-bg { background-color: #c59b27; }
+        .border-brand { border-color: #8c6849; }
+    </style>
+</head>
+<body class="p-3 md:p-6 min-h-screen">
+
+    <div class="max-w-7xl mx-auto space-y-6">
+
+        <!-- Header / Control Navigation Bar -->
+        <div class="no-print bg-white p-4 md:p-5 rounded-2xl shadow-lg border-t-4 border-amber-900 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-12 h-12 brand-bg rounded-xl flex items-center justify-center text-amber-400 text-2xl shadow-sm">
+                    <i class="fa-solid fa-mug-hot"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-extrabold brand-text arabic-fix">شركة كيفان للقهوة العربية</h1>
+                    <p class="text-xs text-stone-500 font-semibold arabic-fix">نظام إدخال البيانات واستخراج الفواتير الرسمية</p>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3">
+                <button onclick="resetForm()" class="bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold py-2.5 px-4 rounded-xl text-xs md:text-sm transition flex items-center gap-2">
+                    <i class="fa-solid fa-rotate-left text-stone-500"></i> فاتورة جديدة
+                </button>
+                <button onclick="generatePDF()" class="brand-bg hover:bg-amber-950 text-white font-bold py-2.5 px-6 rounded-xl text-xs md:text-sm shadow-md transition flex items-center gap-2">
+                    <i class="fa-solid fa-file-pdf text-amber-400"></i> حفظ وتنزيل الفاتورة PDF
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Layout: Grid separating Data Entry & PDF Preview -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+            <!-- ==================================================== -->
+            <!-- SECTION 1: DATA ENTRY FORM (إدخال البيانات)         -->
+            <!-- ==================================================== -->
+            <div class="no-print lg:col-span-5 bg-white p-5 rounded-2xl shadow-md border border-stone-200 space-y-5">
+                
+                <div class="border-b border-stone-200 pb-3 flex items-center justify-between">
+                    <h2 class="text-base font-bold text-stone-800 flex items-center gap-2 arabic-fix">
+                        <i class="fa-solid fa-pen-to-square text-amber-800"></i> إدخال بيانات الفاتورة
+                    </h2>
+                    <span id="entry-inv-num" class="bg-amber-100 text-amber-900 font-black text-xs px-2.5 py-1 rounded-md">#INV-1001</span>
+                </div>
+
+                <!-- Main Fields -->
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-bold text-stone-600 mb-1 arabic-fix"><i class="fa-solid fa-store ml-1 text-amber-700"></i> اسم المحل / العميل</label>
+                        <input type="text" id="shop-name" oninput="syncPreview()" placeholder="أدخل اسم المحل" class="w-full bg-stone-50 border border-stone-300 rounded-lg px-3 py-2 text-sm font-semibold text-stone-800 focus:bg-white focus:ring-2 focus:ring-amber-800 focus:outline-none">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-bold text-stone-600 mb-1 arabic-fix"><i class="fa-solid fa-user-check ml-1 text-amber-700"></i> اسم المستلم</label>
+                            <input type="text" id="recipient-name" oninput="syncPreview()" placeholder="اسم المستلم" class="w-full bg-stone-50 border border-stone-300 rounded-lg px-3 py-2 text-sm font-semibold text-stone-800 focus:bg-white focus:ring-2 focus:ring-amber-800 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-stone-600 mb-1 arabic-fix"><i class="fa-solid fa-user-tie ml-1 text-amber-700"></i> اسم المندوب</label>
+                            <input type="text" id="agent-name" oninput="syncPreview()" placeholder="اسم المندوب" class="w-full bg-stone-50 border border-stone-300 rounded-lg px-3 py-2 text-sm font-semibold text-stone-800 focus:bg-white focus:ring-2 focus:ring-amber-800 focus:outline-none">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-bold text-stone-600 mb-1 arabic-fix"><i class="fa-solid fa-calendar-day ml-1 text-amber-700"></i> تاريخ الفاتورة</label>
+                            <input type="date" id="invoice-date" onchange="syncPreview()" class="w-full bg-stone-50 border border-stone-300 rounded-lg px-3 py-2 text-sm font-semibold text-stone-800 focus:bg-white focus:ring-2 focus:ring-amber-800 focus:outline-none cursor-pointer">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-stone-600 mb-1 arabic-fix"><i class="fa-solid fa-money-check-dollar ml-1 text-amber-700"></i> حالة الدفع</label>
+                            <select id="payment-status" onchange="syncPreview()" class="w-full bg-stone-50 border border-stone-300 rounded-lg px-3 py-2 text-sm font-bold text-stone-800 focus:bg-white focus:ring-2 focus:ring-amber-800 focus:outline-none cursor-pointer">
+                                <option value="خالص">خالص (مدفوع)</option>
+                                <option value="غير خالص">غير خالص (آجل)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Payment Method Field -->
+                    <div>
+                        <label class="block text-xs font-bold text-stone-600 mb-1 arabic-fix"><i class="fa-solid fa-wallet ml-1 text-amber-700"></i> طريقة السداد</label>
+                        <select id="payment-method" onchange="syncPreview()" class="w-full bg-stone-50 border border-stone-300 rounded-lg px-3 py-2 text-sm font-bold text-stone-800 focus:bg-white focus:ring-2 focus:ring-amber-800 focus:outline-none cursor-pointer">
+                            <option value="كاش">كاش (نقداً)</option>
+                            <option value="تحويل">تحويل مصرفي</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Items Input Form -->
+                <div class="pt-2">
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-xs font-bold text-stone-700 arabic-fix"><i class="fa-solid fa-list-check ml-1 text-amber-700"></i> بنود الفاتورة</label>
+                        <button onclick="addNewRow()" class="text-xs bg-amber-800 hover:bg-amber-900 text-white font-bold py-1 px-3 rounded-md transition flex items-center gap-1">
+                            <i class="fa-solid fa-plus"></i> بند جديد
+                        </button>
+                    </div>
+
+                    <div id="items-entry-container" class="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                        <!-- Dynamic Input Rows injected via JS -->
+                    </div>
+                </div>
+
+                <!-- Additional Adjustments -->
+                <div class="pt-2 border-t border-stone-200">
+                    <div class="flex justify-between items-center">
+                        <label class="text-xs font-bold text-stone-600 arabic-fix"><i class="fa-solid fa-percent ml-1 text-amber-700"></i> قيمة الخصم (د.ل):</label>
+                        <input type="number" id="discount-amount" value="0" min="0" step="0.5" oninput="syncPreview()" class="w-28 bg-stone-50 border border-stone-300 rounded-lg px-3 py-1.5 text-sm font-bold text-center focus:bg-white focus:outline-none">
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ==================================================== -->
+            <!-- SECTION 2: OFFICIAL PREVIEW & PDF INVOICE TEMPLATE   -->
+            <!-- ==================================================== -->
+            <div class="lg:col-span-7 overflow-x-auto pb-6">
+                
+                <!-- Print Paper Wrapper -->
+                <div id="printable-invoice" class="arabic-fix p-8 border border-stone-300 rounded-xl shadow-2xl relative flex flex-col justify-between">
+                    
+                    <div>
+                        <!-- Header Banner -->
+                        <div class="brand-bg rounded-xl p-6 text-white mb-6 relative overflow-hidden shadow-sm flex items-center justify-between">
+                            <!-- Background Gold Accent Circle -->
+                            <div class="absolute -left-10 -top-10 w-32 h-32 bg-amber-500 rounded-full opacity-20 blur-xl"></div>
+                            
+                            <div class="flex items-center gap-4 relative z-10">
+                                <div class="w-14 h-14 bg-amber-500/20 border border-amber-400/40 rounded-xl flex items-center justify-center text-amber-300 text-3xl">
+                                    <i class="fa-solid fa-coffee"></i>
+                                </div>
+                                <div>
+                                    <h1 class="text-2xl font-black tracking-wide text-amber-100 arabic-fix">شركة كيفان للقهوة العربية</h1>
+                                    <p class="text-xs text-amber-200/80 font-medium tracking-wider mt-0.5 arabic-fix">أصالة القهوة والذوق الرفيع</p>
+                                </div>
+                            </div>
+
+                            <div class="text-left relative z-10">
+                                <span class="inline-block bg-amber-400/20 border border-amber-400/30 text-amber-200 font-extrabold text-xs px-3 py-1 rounded-md mb-1">
+                                    فاتورة مبيعات
+                                </span>
+                                <div id="preview-inv-num" class="text-lg font-black text-white">#INV-1001</div>
+                            </div>
+                        </div>
+
+                        <!-- Meta Metadata Cards (Shop, Recipient, Agent, Date, Payment Method) -->
+                        <div class="grid grid-cols-2 gap-4 mb-6 text-xs">
+                            <div class="bg-stone-50 p-3.5 rounded-lg border border-stone-200 space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-stone-500 font-semibold arabic-fix">اسم المحل:</span>
+                                    <span id="preview-shop" class="font-bold text-stone-900 text-sm arabic-fix">غير محدد</span>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-stone-500 font-semibold arabic-fix">اسم المستلم:</span>
+                                    <span id="preview-recipient" class="font-bold text-stone-800 arabic-fix">غير محدد</span>
+                                </div>
+                                <div class="flex items-center justify-between border-t border-stone-200/60 pt-1.5">
+                                    <span class="text-stone-500 font-semibold arabic-fix">طريقة السداد:</span>
+                                    <span id="preview-method" class="font-bold text-amber-900 bg-amber-100/70 px-2 py-0.5 rounded text-[11px] arabic-fix">كاش</span>
+                                </div>
+                            </div>
+
+                            <div class="bg-stone-50 p-3.5 rounded-lg border border-stone-200 space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-stone-500 font-semibold arabic-fix">تاريخ الفاتورة:</span>
+                                    <span id="preview-date" class="font-bold text-stone-800 arabic-fix">2026-10-20</span>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-stone-500 font-semibold arabic-fix">اسم المندوب:</span>
+                                    <span id="preview-agent" class="font-bold text-stone-800 arabic-fix">غير محدد</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Official Table -->
+                        <div class="mb-6 rounded-lg overflow-hidden border border-stone-200">
+                            <table class="w-full text-right border-collapse">
+                                <thead>
+                                    <tr class="bg-stone-100 text-stone-700 text-xs font-extrabold border-b border-stone-200">
+                                        <th class="p-3 w-12 text-center">#</th>
+                                        <th class="p-3 arabic-fix">البيان (المنتج)</th>
+                                        <th class="p-3 w-20 text-center arabic-fix">الكمية</th>
+                                        <th class="p-3 w-20 text-center arabic-fix">الوحدة</th>
+                                        <th class="p-3 w-28 text-center arabic-fix">سعر الوحدة</th>
+                                        <th class="p-3 w-28 text-left arabic-fix">الإجمالي</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="preview-table-body" class="text-xs text-stone-800 divide-y divide-stone-100">
+                                    <!-- Dynamic rows from script -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Calculations and Status Badge Section -->
+                        <div class="flex items-start justify-between gap-4 pt-2">
+                            
+                            <!-- Payment Status Stamp Badge -->
+                            <div class="pt-2">
+                                <div id="preview-status-stamp" class="border-2 border-emerald-600 text-emerald-700 bg-emerald-50/80 px-5 py-2 rounded-lg text-sm font-black tracking-wide inline-block rotate-[-3deg] shadow-sm arabic-fix">
+                                    خالص
+                                </div>
+                            </div>
+
+                            <!-- Totals Box -->
+                            <div class="w-64 bg-stone-50 p-3.5 rounded-lg border border-stone-200 space-y-2 text-xs">
+                                <div class="flex justify-between items-center text-stone-600 font-semibold">
+                                    <span class="arabic-fix">المجموع الفرعي:</span>
+                                    <div><span id="preview-subtotal">0.00</span> <span class="text-[10px] text-stone-500">د.ل</span></div>
+                                </div>
+                                <div class="flex justify-between items-center text-stone-600 font-semibold">
+                                    <span class="arabic-fix">الخصم:</span>
+                                    <div><span id="preview-discount">0.00</span> <span class="text-[10px] text-stone-500">د.ل</span></div>
+                                </div>
+                                <div class="border-t border-stone-300 pt-2 flex justify-between items-center text-sm font-black brand-text">
+                                    <span class="arabic-fix">الإجمالي النهائي:</span>
+                                    <div><span id="preview-grandtotal" class="text-base text-amber-900 font-extrabold">0.00</span> <span class="text-xs">د.ل</span></div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <!-- Footer Note -->
+                    <div class="mt-12 pt-4 border-t border-stone-200 text-center text-[11px] text-stone-400 font-medium arabic-fix">
+                        شركة كيفان للقهوة العربية - جميع الحقوق محفوظة | هذه الفاتورة معتمدة صادرة إلكترونياً
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Application Script Logic -->
+    <script>
+        // Set Today's Date Default
+        document.getElementById('invoice-date').valueAsDate = new Date();
+
+        // Unique Row Tracker ID
+        let rowCounter = 0;
+
+        // Auto Increment Invoice Number using LocalStorage
+        function initInvoiceNumber() {
+            let currentNum = localStorage.getItem('kayfan_inv_num') || 1001;
+            document.getElementById('entry-inv-num').innerText = `#INV-${currentNum}`;
+            document.getElementById('preview-inv-num').innerText = `#INV-${currentNum}`;
+        }
+
+        function incrementInvoiceNumber() {
+            let currentNum = parseInt(localStorage.getItem('kayfan_inv_num') || 1001);
+            localStorage.setItem('kayfan_inv_num', currentNum + 1);
+        }
+
+        // Add Input Row in Form
+        function addNewRow(desc = '', qty = 1, unit = 'صندوق', price = 0) {
+            rowCounter++;
+            const container = document.getElementById('items-entry-container');
+            const rowDiv = document.createElement('div');
+            rowDiv.id = `entry-row-${rowCounter}`;
+            rowDiv.className = "bg-stone-50 p-2.5 rounded-lg border border-stone-200 space-y-2 text-xs relative group";
+            
+            rowDiv.innerHTML = `
+                <div class="flex items-center justify-between gap-2">
+                    <input type="text" value="${desc}" placeholder="اسم الصنف / البيان" oninput="syncPreview()" class="item-desc w-full bg-white border border-stone-300 rounded px-2 py-1 font-semibold text-stone-800 focus:outline-none">
+                    <button onclick="removeRow(${rowCounter})" class="text-rose-500 hover:text-rose-700 p-1 transition" title="حذف">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </div>
+                <div class="grid grid-cols-3 gap-2">
+                    <div>
+                        <span class="text-[10px] text-stone-500 block mb-0.5 arabic-fix">الكمية</span>
+                        <input type="number" value="${qty}" min="1" oninput="syncPreview()" class="item-qty w-full bg-white border border-stone-300 rounded px-1.5 py-1 text-center font-bold text-stone-800 focus:outline-none">
+                    </div>
+                    <div>
+                        <span class="text-[10px] text-stone-500 block mb-0.5 arabic-fix">الوحدة</span>
+                        <select onchange="syncPreview()" class="item-unit w-full bg-white border border-stone-300 rounded px-1 py-1 font-semibold text-stone-800 focus:outline-none">
+                            <option value="صندوق" ${unit === 'صندوق' ? 'selected' : ''}>صندوق</option>
+                            <option value="قطعة" ${unit === 'قطعة' ? 'selected' : ''}>قطعة</option>
+                        </select>
+                    </div>
+                    <div>
+                        <span class="text-[10px] text-stone-500 block mb-0.5 arabic-fix">السعر</span>
+                        <input type="number" value="${price}" min="0" step="0.5" oninput="syncPreview()" class="item-price w-full bg-white border border-stone-300 rounded px-1.5 py-1 text-center font-bold text-stone-800 focus:outline-none">
+                    </div>
+                </div>
+            `;
+            container.appendChild(rowDiv);
+            syncPreview();
+        }
+
+        // Remove Row
+        function removeRow(id) {
+            const rows = document.querySelectorAll('#items-entry-container > div');
+            if (rows.length > 1) {
+                const el = document.getElementById(`entry-row-${id}`);
+                if (el) el.remove();
+                syncPreview();
+            } else {
+                alert('يجب إبقاء بند واحد على الأقل في الفاتورة.');
+            }
+        }
+
+        // Sync Data from Entry Form to Preview Printable Invoice
+        function syncPreview() {
+            // Header Infos
+            const shop = document.getElementById('shop-name').value.trim();
+            const recipient = document.getElementById('recipient-name').value.trim();
+            const agent = document.getElementById('agent-name').value.trim();
+            const date = document.getElementById('invoice-date').value;
+            const status = document.getElementById('payment-status').value;
+            const method = document.getElementById('payment-method').value;
+
+            document.getElementById('preview-shop').innerText = shop || 'غير محدد';
+            document.getElementById('preview-recipient').innerText = recipient || 'غير محدد';
+            document.getElementById('preview-agent').innerText = agent || 'غير محدد';
+            document.getElementById('preview-date').innerText = date || '';
+            document.getElementById('preview-method').innerText = method === 'كاش' ? 'كاش (نقداً)' : 'تحويل مصرفي';
+
+            // Payment Status Stamp Sync
+            const stamp = document.getElementById('preview-status-stamp');
+            if (status === 'خالص') {
+                stamp.innerText = 'خالص';
+                stamp.className = 'border-2 border-emerald-600 text-emerald-700 bg-emerald-50 px-5 py-1.5 rounded-lg text-sm font-black tracking-wide inline-block rotate-[-3deg] shadow-sm arabic-fix';
+            } else {
+                stamp.innerText = 'غير خالص';
+                stamp.className = 'border-2 border-rose-600 text-rose-700 bg-rose-50 px-5 py-1.5 rounded-lg text-sm font-black tracking-wide inline-block rotate-[-3deg] shadow-sm arabic-fix';
+            }
+
+            // Sync Items Table
+            const tbody = document.getElementById('preview-table-body');
+            tbody.innerHTML = '';
+
+            let subtotal = 0;
+            const entryRows = document.querySelectorAll('#items-entry-container > div');
+
+            entryRows.forEach((row, index) => {
+                const desc = row.querySelector('.item-desc').value.trim() || 'صنف بدون عنوان';
+                const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
+                const unit = row.querySelector('.item-unit').value;
+                const price = parseFloat(row.querySelector('.item-price').value) || 0;
+                const lineTotal = qty * price;
+                subtotal += lineTotal;
+
+                const tr = document.createElement('tr');
+                tr.className = index % 2 === 0 ? 'bg-white' : 'bg-stone-50/60';
+                tr.innerHTML = `
+                    <td class="p-3 text-center text-stone-400 font-bold">${index + 1}</td>
+                    <td class="p-3 font-semibold text-stone-800 arabic-fix">${desc}</td>
+                    <td class="p-3 text-center font-bold text-stone-700">${qty}</td>
+                    <td class="p-3 text-center text-stone-600 arabic-fix">${unit}</td>
+                    <td class="p-3 text-center font-bold text-stone-700">${price.toFixed(2)}</td>
+                    <td class="p-3 text-left font-black text-stone-900">${lineTotal.toFixed(2)} د.ل</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Calculations
+            const discount = parseFloat(document.getElementById('discount-amount').value) || 0;
+            const grandTotal = Math.max(0, subtotal - discount);
+
+            document.getElementById('preview-subtotal').innerText = subtotal.toFixed(2);
+            document.getElementById('preview-discount').innerText = discount.toFixed(2);
+            document.getElementById('preview-grandtotal').innerText = grandTotal.toFixed(2);
+        }
+
+        // Reset Form
+        function resetForm() {
+            if (confirm('هل تريد إنشاء فاتورة جديدة؟ سيتم مسح البيانات الحالية.')) {
+                document.getElementById('shop-name').value = '';
+                document.getElementById('recipient-name').value = '';
+                document.getElementById('agent-name').value = '';
+                document.getElementById('payment-status').value = 'خالص';
+                document.getElementById('payment-method').value = 'كاش';
+                document.getElementById('discount-amount').value = '0';
+                document.getElementById('invoice-date').valueAsDate = new Date();
+
+                document.getElementById('items-entry-container').innerHTML = '';
+                addNewRow('قهوة عربية بالهيل 500جم', 1, 'صندوق', 0);
+                syncPreview();
+            }
+        }
+
+        // Generate Clean PDF without Disjointed Arabic Characters
+        function generatePDF() {
+            const element = document.getElementById('printable-invoice');
+            const invNum = document.getElementById('preview-inv-num').innerText;
+            const shopName = document.getElementById('shop-name').value.trim() || 'عميل';
+
+            // High Quality HTML2PDF Settings to prevent disjointed Arabic characters
+            const opt = {
+                margin:       [0.2, 0.2, 0.2, 0.2],
+                filename:     `فاتورة_كيفان_${invNum}_${shopName}.pdf`,
+                image:        { type: 'jpeg', quality: 1.0 },
+                html2canvas:  { 
+                    scale: 3, // High scale prevents letter detachment rendering artifacts
+                    useCORS: true,
+                    letterRendering: true,
+                    scrollX: 0,
+                    scrollY: 0
+                },
+                jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+            };
+
+            // Generate PDF
+            html2pdf().set(opt).from(element).save().then(() => {
+                incrementInvoiceNumber();
+                initInvoiceNumber();
+            });
+        }
+
+        // Initial setup on window load
+        window.onload = function() {
+            initInvoiceNumber();
+            // Default initial items
+            addNewRow('قهوة عربية بالهيل 500جم', 2, 'صندوق', 12.5);
+            addNewRow('زعفران سوبر نقيل 10جم', 5, 'قطعة', 4.0);
+            syncPreview();
+        };
+    </script>
+</body>
+</html>
